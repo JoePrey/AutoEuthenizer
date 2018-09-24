@@ -1,11 +1,10 @@
+
 import RPi.GPIO as GPIO
 import config
 import utilities
+import time
 from threading import Thread
-import cwiid 
-
-util = utilities.utils()
-
+import cwiid
 
 class rc_control:
     
@@ -13,7 +12,7 @@ class rc_control:
     
         self.name = name
         self.author = author
-        
+        self.inMenu = False
         #self.IP = util.get_ip_address('wlan0')
         self.forwardPIN = 12
         self.enableBlueTooth = True
@@ -32,42 +31,52 @@ class rc_control:
 
         GPIO.setmode(GPIO.BOARD)
         GPIO.setwarnings(False)
-            
+
+        GPIO.setup(self.forwardPIN,GPIO.OUT)
+        GPIO.setup(self.backwardsPIN,GPIO.OUT)
+        GPIO.setup(self.leftPIN,GPIO.OUT)
+        GPIO.setup(self.rightPIN,GPIO.OUT)            
   
-    def pairSignal(self,threadName,delay):
+    def showUnPairedSignal(self,threadName,delay):
 
         while not self.isPaired:            
             GPIO.setup(self.signalLight,True)
             time.sleep(.2)
             GPIO.setup(self.signalLight,False)
-            time.sleep(.2) 
+            time.sleep(.2)
+            
     def processControllerInput(self):
 
-        if(not self.isChasing):
+        if(self.wm.state['buttons'] & cwiid.BTN_PLUS):
+            print("taking pic")
+            
+        if(self.wm.state['buttons'] & cwiid.BTN_2):
+            self.back = True
+            self.forward = False
+        else:
+            self.back = False   
 
-            if(self.wm.state['buttons'] & cwiid.BTN_2):
-                self.back = True
-                self.forward = False
-            else:
-                self.back = False   
+        if (self.wm.state['buttons'] & cwiid.BTN_1):
+            self.forward = True
+            self.back = False
+        else:
+            self.forward = False                        
 
-            if (self.wm.state['buttons'] & cwiid.BTN_1):
-                self.forward = True
-                self.back = False
-            else:
-                self.forward = False                        
+        if (self.wm.state['buttons'] - cwiid.BTN_UP - cwiid.BTN_LEFT == 0):
+            print("IP RIGHT")
+           
+            
+        if (self.wm.state['buttons'] & cwiid.BTN_UP):
+            self.left = True
+            self.right = False
+        else: 
+            self.left = False        
 
-            if (self.wm.state['buttons'] & cwiid.BTN_UP):
-                self.left = True
-                self.right = False
-            else: 
-                self.left = False        
-
-            if (self.wm.state['buttons'] & cwiid.BTN_DOWN):
-                self.right = True
-                self.left = False
-            else: 
-                self.right = False            
+        if (self.wm.state['buttons'] & cwiid.BTN_DOWN):
+            self.right = True
+            self.left = False
+        else: 
+            self.right = False            
         #else:
         #    print 'chasing'
 
@@ -80,15 +89,15 @@ class rc_control:
 
             time.sleep(1)
 
-        if(self.wm.state['buttons'] & cwiid.BTN_A):                    
-            self.wayPoint = self.getGPS()
-            #print self.wayPoint
+##        if(self.wm.state['buttons'] & cwiid.BTN_A):                    
+##            self.wayPoint = self.getGPS()
+##            #print self.wayPoint
+##
+##        if(self.wm.state['buttons'] & cwiid.BTN_B):
+##            self.isChasing = False
+##            print ('stop chasing')
 
-        if(self.wm.state['buttons'] & cwiid.BTN_B):
-            self.isChasing = False
-            print ('stop chasing')
-
-    def processMovement(self):
+    def doMovement(self):
         
         GPIO.output(self.forwardPIN,self.forward)
     
@@ -98,17 +107,16 @@ class rc_control:
     
         GPIO.output(self.rightPIN,self.right)
 
-        if(not self.isChasing):
-            if(self.back):
-                print ('Backwards')
-            if(self.forward):
-                print ('forward')
-            if(self.left):
-                print ('left')
-            if(self.right):
-                print ('right')                                    
+        if(self.back):
+            print ('Backwards')
+        if(self.forward):
+            print ('forward')
+        if(self.left):
+            print ('left')
+        if(self.right):
+            print ('right')                                    
 
-    def processMenuInput(self):
+    def doMenuMovement(self):
 
         if(self.wm.state['buttons'] & cwiid.BTN_RIGHT):
             self.menuIndex +=1
@@ -135,25 +143,26 @@ class rc_control:
         if(self.menuIndex == 4):
             self.wm.led = 8    
 
-        if(self.wm.state['buttons'] & cwiid.BTN_1):
-            print ("hit button1")
-            if(self.menuIndex == 1):
-                print ('capturing WAY POINT')
-                self.captureWayPoint = True
-                self.exitMenu()
-
-        if(self.wm.state['buttons'] & cwiid.BTN_2):
-            if(self.menuIndex == 1):
-                self.captureWayPoint = False
-                print ('start chase')
-                thread.start_new_thread(self.chase,(self.wayPoint,"signalblink",self.writeLevel,))  
-                self.exitMenu()
+##        if(self.wm.state['buttons'] & cwiid.BTN_1):
+##            print ("hit button1")
+##            if(self.menuIndex == 1):
+##                print ('capturing WAY POINT')
+##                self.captureWayPoint = True
+##                self.exitMenu()
+##
+##        if(self.wm.state['buttons'] & cwiid.BTN_2):
+##            if(self.menuIndex == 1):
+##                self.captureWayPoint = False
+##                print ('start chase')
+##                thread.start_new_thread(self.chase,(self.wayPoint,"signalblink",self.writeLevel,))  
+##                self.exitMenu()
 
     def pair(self):
         
+        
         #Thread.start_new_thread(self.pairSignal,("signalblink",self.writeLevel,))
         
-        Thread(target=self.pairSignal)
+        Thread(target=self.showUnPairedSignal)
 
         if(self.enableBlueTooth):
     
@@ -170,7 +179,7 @@ class rc_control:
                 except RuntimeError:
 
                     print ("Error opening wiimote connection")
-                    print ("attempt " + str(attempts)) 
+                    print ("attempt " + str(attempts))                    
 
                 attempts +=1             
             
@@ -181,4 +190,21 @@ class rc_control:
             GPIO.setup(self.signalLight,True)
 
             time.sleep(3)
-
+            
+            return False
+        
+    def run(self):
+        
+        while self.isPaired:            
+        
+            self.processControllerInput()              
+            
+            if(self.inMenu):        
+                self.doMenuMovement()
+            else:
+                self.doMovement()
+    def kill(self):
+        self.wm = None
+                
+                
+       

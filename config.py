@@ -6,5 +6,3 @@ class CONFIG:
         self.leftPIN = 13
         self.rightPIN = 11
         self.signalLight = 7
-    
-    
